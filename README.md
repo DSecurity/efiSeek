@@ -2,27 +2,27 @@
 
 ## About
 
-The analyzer automates the process of exploring EFI files. After the analysis, well-known protocols, interrupts, etc. are found.
+The analyzer automates the process of researching EFI files, helps to discover and analyze well-known protocols, smi handlers, etc.
 
 ## Features
 
-### Find known EFI GUID's
+### Finds known EFI GUID's
 
 ![guids](./img/guids.png)
 
-### Identified protocols which are finding with `LOCATE_PROTOCOL` function
+### Identifies protocols located with `LOCATE_PROTOCOL` function
 
 ![locateProtocols](./img/locateProtocols.png)
 
-### Identified functions used as the `NOTIFY` function
+### Identifies functions used as the `NOTIFY` function
 
 ![notify](./img/notify.png)
 
-### Identified protocols installed in the module through `INSTALL_PROTOCOL_INTERFACE`
+### Identifies protocols installed in the module through `INSTALL_PROTOCOL_INTERFACE`
 
 ![install](./img/install.png)
 
-### Identified functions used as an interrupt function (like some hardware, software or child interrupt)
+### Identifies functions used as an interrupt function (like some hardware, software/child interrupt)
 
 ![ioTrap](./img/ioTrap.png)
 
@@ -32,9 +32,9 @@ The analyzer automates the process of exploring EFI files. After the analysis, w
 
 ![sw](./img/sw.png)
 
-### Script for loading efi modules to relevant directories upon import in `Headless mode`
+### Script for loading efi modules to relevant directories in `Headless mode`
 
-Sorting smm modules relying on meta information by next folders:
+Sorting smm modules relying on meta information into next folders:
 
 * SwInterrupts
 * ChildInterrupts
@@ -45,14 +45,14 @@ Sorting smm modules relying on meta information by next folders:
 
 ## Installation
 
-Set the `GHIDRA_INSTALL_DIR` environment variable to the ghidra path.
+Set `GHIDRA_INSTALL_DIR` environment variable to ghidra path.
 
 Start `gradlew.bat`, after the completion of building a copy archive from the `dist` directory to `GHIDRA_HOME_DIR/Extensions/Ghidra/`.
 And turn on this extention in your ghidra.
 
 ## Usage
 
-After install, you can use the analyzer. If you open a UEFI file, the analyzer appears and is selected automatically.
+After installation you are free to use this analyzer. If you open a EFI file, the analyzer appears selected automatically.
 To start the analyzer, press `A` or `Analysis/Auto Analyze` and press `Analyze`.
 
 ## References
