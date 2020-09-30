@@ -84,7 +84,7 @@ public class EfiSeek extends EfiUtils {
  
 		try {
 			this.uefiHeadersArchive = FileDataTypeManager
-					.openFileArchive(Application.getModuleDataFile("efiseek", gdtFileName), false);
+					.openFileArchive(Application.getModuleDataFile("efiSeek", gdtFileName), false);
 		} catch (IOException e) {
 			Msg.error(this, "error open " + gdtFileName);
 			e.printStackTrace();
@@ -92,7 +92,7 @@ public class EfiSeek extends EfiUtils {
 		}
 		try {
 			this.guidBasePath = Paths
-					.get(Application.getModuleDataFile("efiseek", "guids-db.ini").getAbsolutePath());
+					.get(Application.getModuleDataFile("efiSeek", "guids-db.ini").getAbsolutePath());
 		} catch (FileNotFoundException e) {
 			Msg.error(this, "error open guids-db.ini");
 			e.printStackTrace();
