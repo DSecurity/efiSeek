@@ -32,6 +32,7 @@ import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Instruction;
 import ghidra.program.model.listing.ParameterImpl;
 import ghidra.program.model.listing.ReturnParameterImpl;
+import ghidra.program.model.listing.Variable;
 import ghidra.program.model.listing.Function.FunctionUpdateType;
 import ghidra.program.model.mem.MemoryAccessException;
 import ghidra.program.model.mem.MemoryBlock;
@@ -46,7 +47,6 @@ import ghidra.util.exception.InvalidInputException;
 public abstract class EfiUtils extends FlatProgramAPI {
 
 	public final void defineData(Address address, DataType dataType, String name, String comment) throws Exception {
-
 		for (int i = 0; i < dataType.getLength(); i++) {
 			Address currentAddress = address.add(i);
 			Data existingData = this.getDataAt(currentAddress);
@@ -59,19 +59,34 @@ public abstract class EfiUtils extends FlatProgramAPI {
 				}
 			}
 		}
+		
+		boolean primary = true;
+		
 		SymbolTable symbolTable = this.getCurrentProgram().getSymbolTable();
 		for (Symbol symbol : symbolTable.getSymbols(address)) {
-			symbolTable.removeSymbolSpecial(symbol);
+			if (symbol.getSource() != SourceType.USER_DEFINED) {
+				symbolTable.removeSymbolSpecial(symbol);
+			}
+			else {
+				primary = false;
+			}
 		}
 
 		this.createData(address, dataType);
 
 		if (name != null) {
-			this.createLabel(address, name, true);
+			this.createLabel(address, name, primary, SourceType.ANALYSIS);
 		}
 
 		if (comment != null) {
 			this.setPlateComment(address, comment);
+		}
+	}
+	
+	public final void defineVar(Variable var, DataType dataType, String name) throws Exception {
+		if(var.getSource() != SourceType.USER_DEFINED) {
+			var.setName(name, SourceType.ANALYSIS);
+			var.setDataType(dataType, false, true, SourceType.ANALYSIS);
 		}
 	}
 
@@ -133,12 +148,12 @@ public abstract class EfiUtils extends FlatProgramAPI {
 				return;
 			}
 		} else {
-			func.setName(name, SourceType.USER_DEFINED);
+			func.setName(name, SourceType.ANALYSIS);
 		}
 
 		ReturnParameterImpl returnValue = new ReturnParameterImpl(defenition.getReturnType(), getCurrentProgram());
 
 		func.updateFunction(null, returnValue, parametrs, FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS, false,
-				SourceType.USER_DEFINED);
+				SourceType.ANALYSIS);
 	}
 }
