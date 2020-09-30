@@ -106,13 +106,15 @@ public class EfiSeekAnalyzer extends AbstractAnalyzer {
 			this.gdtFileName = "BehemotX64.gdt";
 		}
 		FlatProgramAPI flatProgramAPI = new FlatProgramAPI(program);
-		if (program.canLock() == true)
+		if (program.isLocked() == false) {
 			try {
 				program.setImageBase(flatProgramAPI.toAddr(0x80000000), true);
 			} catch (AddressOverflowException | LockException | IllegalStateException e) {
 				Msg.error(this, "Problems with installing the base address");
 				e.printStackTrace();
 			}
+		}
+
 		EfiSeek EfiTool = new EfiSeek(program, gdtFileName);
 		EfiTool.findGuids();
 		try {
