@@ -19,6 +19,7 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
+import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.listing.Variable;
@@ -30,6 +31,7 @@ import java.util.HashMap;
 public class VarnodeConverter {
 	private Address addr = null;
 	private Variable finalVar = null;
+	private Long constVar = null;
 	private ArrayList<Long> offset = new ArrayList<Long>();
 	private Boolean deref = false;
 	private HashMap<Variable, Long> mulOffset = new HashMap<Variable, Long>();
@@ -43,6 +45,7 @@ public class VarnodeConverter {
 	public void newVarnode(Varnode inVar) {
 		this.addr = null;
 		this.finalVar = null;
+		this.constVar = null;
 		this.offset = new ArrayList<Long>();
 		this.deref = false;
 		this.mulOffset = new HashMap<Variable, Long>();
@@ -60,7 +63,7 @@ public class VarnodeConverter {
 			this.finalVar = this.findVar(inVar);
 			return;
 		case AddressSpace.TYPE_CONSTANT:
-			Msg.out("varnode is const");
+			this.constVar = inVar.getOffset();
 			return;
 		case AddressSpace.TYPE_RAM:
 			this.addr = this.flatProgramAPI.toAddr(inVar.getOffset());
@@ -229,25 +232,28 @@ public class VarnodeConverter {
 		Varnode var1 = pCode.getInput(0);
 		Varnode var2 = pCode.getInput(1);
 		Varnode var3 = pCode.getInput(2);
-
+		
 		if (this.checkUnique(pCode)) {
 			this.offset.add(var2.getOffset() * var3.getOffset());
 			return;
 		}
-		if (var1.isRegister()) {
-			if (var1.getOffset() == 0x20) {
-				this.finalVar = this.findStackVar(var1, (int) var2.getOffset());
-				return;
-			}
+		
+		switch (var1.getSpace() & AddressSpace.ID_TYPE_MASK) {
+		case AddressSpace.TYPE_REGISTER:
 			this.finalVar = this.findVar(var1);
-			this.offset.add(var2.getOffset() * var3.getOffset());
 			return;
-		} else if (var1.isConstant()) {
+		case AddressSpace.TYPE_STACK:
+			this.finalVar = this.findVar(var1);
+			return;
+		case AddressSpace.TYPE_CONSTANT:
 			this.addr = this.flatProgramAPI.toAddr(var1.getOffset() + (var2.getOffset() * var3.getOffset()));
 			return;
-		} else {
+		case AddressSpace.TYPE_RAM:
 			this.addr = this.flatProgramAPI.toAddr(var1.getOffset());
 			this.offset.add(var2.getOffset() * var3.getOffset());
+			return;
+		default:
+			break;
 		}
 	}
 
