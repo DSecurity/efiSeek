@@ -116,6 +116,7 @@ public class EfiSeekAnalyzer extends AbstractAnalyzer {
 		}
 
 		EfiSeek EfiTool = new EfiSeek(program, gdtFileName);
+		EfiTool.updateMemBlockPermission();
 		EfiTool.findGuids();
 		try {
 			EfiTool.forwardSystemTable();

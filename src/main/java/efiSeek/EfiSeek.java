@@ -732,4 +732,16 @@ public class EfiSeek extends EfiUtils {
 		funcParamForwarding.forward(entrtyPoint, 0);
 		funcParamForwarding.forward(entrtyPoint, 1);
 	}
+	
+	public void updateMemBlockPermission() {
+		if(mem.getBlock("metaBlock") != null) {
+			return;
+		}
+		MemoryBlock[] memBlocks = this.mem.getBlocks();
+		
+		for(int i = 0; i < memBlocks.length; i++) {
+			memBlocks[i].setPermissions(true, true, true);
+		}
+		
+	}
 }
