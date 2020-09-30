@@ -31,7 +31,7 @@ import ghidra.program.model.listing.ReturnParameterImpl;
 import ghidra.program.model.listing.Function.FunctionUpdateType;
 import ghidra.program.model.pcode.FunctionPrototype;
 import ghidra.program.model.pcode.HighFunction;
-import ghidra.program.model.pcode.HighParam;
+import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
@@ -85,7 +85,7 @@ public class FuncParamForwarding {
 		if (funcProto.getNumParams() < paramNumber + 1) {
 			return;
 		}
-		HighParam needParam = funcProto.getParam(paramNumber);
+		HighSymbol needParam = funcProto.getParam(paramNumber);
 
 		ArrayList<ParameterImpl> parametrs = new ArrayList<ParameterImpl>();
 		Parameter[] parametrDefenitions = startFunc.getParameters();
@@ -111,7 +111,7 @@ public class FuncParamForwarding {
 					this.flatProgramAPI.getCurrentProgram());
 
 			startFunc.updateFunction(null, returnValue, parametrs, FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS,
-					true, SourceType.USER_DEFINED);
+					true, SourceType.ANALYSIS);
 		} else {
 			name = needParam.getName();
 			type = needParam.getDataType();
@@ -251,7 +251,7 @@ public class FuncParamForwarding {
 					try {
 						this.flatProgramAPI.createData(this.flatProgramAPI.toAddr(var.getOffset()),
 								var.getHigh().getDataType());
-						this.flatProgramAPI.createLabel(this.flatProgramAPI.toAddr(var.getOffset()), name, true);
+						this.flatProgramAPI.createLabel(this.flatProgramAPI.toAddr(var.getOffset()), name, true, SourceType.ANALYSIS);
 					} catch (Exception e) {
 						Msg.warn(this, "Create data failed. Conflict at addr " + Long.toHexString(var.getOffset()));
 						continue;
