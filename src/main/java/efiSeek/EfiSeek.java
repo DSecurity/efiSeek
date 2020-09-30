@@ -24,14 +24,21 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 
+import org.json.JSONObject;
+
 import ghidra.framework.Application;
+
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
+import ghidra.app.util.cparser.C.CParser;
+import ghidra.app.util.cparser.C.ParseException;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.FileDataTypeManager;
 import ghidra.program.model.data.FunctionDefinition;
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.FunctionSignature;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.Memory;
 import ghidra.program.model.mem.MemoryAccessException;
@@ -40,9 +47,13 @@ import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
-import ghidra.program.model.symbol.SourceType;
+import ghidra.program.model.pcode.HighFunctionDBUtil;
+
+
+
 import ghidra.util.Msg;
 import ghidra.util.task.TaskMonitor;
+
 
 public class EfiSeek extends EfiUtils {
 	private Memory mem;
@@ -52,14 +63,15 @@ public class EfiSeek extends EfiUtils {
 	private Integer nameCount = 0;
 	private VarnodeConverter varnodeConverter = null;
 
-//	Guid Address 
-	private HashMap<String, Address> locateProtocol = new HashMap<>();
-//	Guid Address
-	private HashMap<String, Address> installProtocol = new HashMap<>();
-//	Guid Address
-	private HashMap<String, Address> childSmi = new HashMap<>();
-//	Type Address  
-	private HashMap<String, Address> regInterrupt = new HashMap<>();
+	private JSONObject meta = new JSONObject();
+	private JSONObject locateProtocol = new JSONObject();
+	private JSONObject installProtocol = new JSONObject();
+	private JSONObject interrupts = new JSONObject();
+	private JSONObject childSmi = new JSONObject();
+	private JSONObject swSmi = new JSONObject();
+	private JSONObject hwSmi = new JSONObject();
+	
+	private HashMap<Function, DecompileResults> decompileFunction = new HashMap<>();
 
 	private String[] uefiFuncList = new String[] { "EFI_LOCATE_PROTOCOL", "EFI_SMM_GET_SMST_LOCATION2",
 			"EFI_LOCATE_PROTOCOL", "EFI_SMM_REGISTER_PROTOCOL_NOTIFY", "REGISTER", "EFI_INSTALL_PROTOCOL_INTERFACE" };
@@ -69,23 +81,24 @@ public class EfiSeek extends EfiUtils {
 		this.monitor = TaskMonitor.DUMMY;
 		this.mem = getCurrentProgram().getMemory();
 		this.varnodeConverter = new VarnodeConverter(prog);
-
+ 
 		try {
 			this.uefiHeadersArchive = FileDataTypeManager
-					.openFileArchive(Application.getModuleDataFile("efiSeek", gdtFileName), false);
+					.openFileArchive(Application.getModuleDataFile("efiseek", gdtFileName), false);
 		} catch (IOException e) {
-			Msg.error(this, "error open Behemoth.gdt");
+			Msg.error(this, "error open " + gdtFileName);
 			e.printStackTrace();
 			return;
 		}
 		try {
 			this.guidBasePath = Paths
-					.get(Application.getModuleDataFile("efiSeek", "guids-db.ini").getAbsolutePath());
+					.get(Application.getModuleDataFile("efiseek", "guids-db.ini").getAbsolutePath());
 		} catch (FileNotFoundException e) {
 			Msg.error(this, "error open guids-db.ini");
 			e.printStackTrace();
 		}
 		this.parseGuidsBase();
+		this.getMeta();
 	}
 
 	private void parseGuidsBase() {
@@ -133,55 +146,55 @@ public class EfiSeek extends EfiUtils {
 				Msg.info(this, this.guids.get(strGuid));
 				switch (this.guids.get(strGuid)) {
 				case ("EFI_SMM_GPI_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("gpiHandler", this.toAddr(0x0));
+					this.hwSmi.put("gpiHandler", true);
 					break;
 				case ("EFI_SMM_ICHN_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("ichnHandler", this.toAddr(0x0));
+					this.hwSmi.put("ichnHandler", true);
 					break;
 				case ("EFI_SMM_IO_TRAP_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("ioTrapHandler", this.toAddr(0x0));
+					this.hwSmi.put("ioTrapHandler", true);
 					break;
 				case ("EFI_SMM_PERIODIC_TIMER_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("periodicTimerHandler", this.toAddr(0x0));
+					this.hwSmi.put("periodicTimerHandler", true);
 					break;
 				case ("EFI_SMM_POWER_BUTTON_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("pwrButtonHandler", this.toAddr(0x0));
+					this.hwSmi.put("pwrButtonHandler", true);
 					break;
 				case ("EFI_SMM_SX_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("sxHandler", this.toAddr(0x0));
+					this.hwSmi.put("sxHandler", true);
 					break;
 				case ("EFI_SMM_USB_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("usbHandler", this.toAddr(0x0));
+					this.hwSmi.put("usbHandler", true);
 					break;
 				case ("EFI_SMM_STANDBY_BUTTON_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("standbyButtonHandler", this.toAddr(0x0));
+					this.hwSmi.put("standbyButtonHandler", true);
 					break;
 				case ("PCH_TCO_SMI_DISPATCH_PROTOCOL_GUID"):
-					this.regInterrupt.put("pchTcoHandler", this.toAddr(0x0));
+					this.hwSmi.put("pchTcoHandler", true);
 					break;
 				case ("PCH_PCIE_SMI_DISPATCH_PROTOCOL_GUID"):
-					this.regInterrupt.put("pchPcieHandler", this.toAddr(0x0));
+					this.hwSmi.put("pchPcieHandler", true);
 					break;
 				case ("PCH_ACPI_SMI_DISPATCH_PROTOCOL_GUID"):
-					this.regInterrupt.put("pchAcpiHandler", this.toAddr(0x0));
+					this.hwSmi.put("pchAcpiHandler", true);
 					break;
 				case ("PCH_GPIO_UNLOCK_SMI_DISPATCH_PROTOCOL_GUID"):
-					this.regInterrupt.put("pchGpioUnlockHandler", this.toAddr(0x0));
+					this.hwSmi.put("pchGpioUnlockHandler", true);
 					break;
 				case ("PCH_SMI_DISPATCH_PROTOCOL_GUID"):
-					this.regInterrupt.put("pchHandler", this.toAddr(0x0));
+					this.hwSmi.put("pchHandler", true);
 					break;
 				case ("PCH_ESPI_SMI_DISPATCH_PROTOCOL_GUID"):
-					this.regInterrupt.put("pchEspiHandler", this.toAddr(0x0));
+					this.hwSmi.put("pchEspiHandler", true);
 					break;
 				case ("EFI_ACPI_EN_DISPATCH_PROTOCOL_GUID"):
-					this.regInterrupt.put("acpiEnHandler", this.toAddr(0x0));
+					this.hwSmi.put("acpiEnHandler", true);
 					break;
 				case ("EFI_ACPI_DIS_DISPATCH_PROTOCOL_GUID"):
-					this.regInterrupt.put("acpiDisHandler", this.toAddr(0x0));
+					this.hwSmi.put("acpiDisHandler", true);
 					break;
 				case ("EFI_SMM_SW_DISPATCH2_PROTOCOL_GUID"):
-					this.regInterrupt.put("swSmiHandler", this.toAddr(0x0));
+					this.swSmi.put("swSmiHandler", true);
 					break;
 				default:
 					break;
@@ -203,17 +216,36 @@ public class EfiSeek extends EfiUtils {
 		this.createFunctionFormDifinition(addrEntryPoint, funcProt, "ModuleEntryPoint");
 	}
 
+	private void getSmstLocation2(PcodeOpAST pCode) throws Exception {
+		pCode = this.checkFuncParams(pCode, "EFI_SMM_GET_SMST_LOCATION2", 2);
+		
+		if(pCode == null) {
+			return;
+		}
+		
+		this.varnodeConverter.newVarnode(pCode.getInput(2));
+
+		DataType smstType = this.uefiHeadersArchive.getDataType("/behemot.h/EFI_SMM_SYSTEM_TABLE2 *");
+		if (varnodeConverter.isGlobal()) {
+			this.defineData(varnodeConverter.getGlobalAddress(), smstType, "gSmst" + this.nameCount, null);
+		} else if (varnodeConverter.isLocal()) {
+			this.defineVar(varnodeConverter.getVariable(), smstType, "Smst" + this.nameCount);
+			this.nameCount++;
+			
+		}
+	}
+	
 	private String guidNameToProtocolName(String name) {
 		String protName = name.substring(0, name.length() - 5);
 		return protName;
 	}
-
+	
 	private void locateProtocol(PcodeOpAST pCode) throws Exception {
-		if (pCode.getInputs().length != 4) {
-			Msg.error(this, "Wrong number of parameters for locateProtocol func "
-					+ pCode.getInput(0).getHigh().getHighFunction().getFunction().getName());
+		pCode = this.checkFuncParams(pCode, "EFI_LOCATE_PROTOCOL", 3);
+		if(pCode == null) {
 			return;
 		}
+		
 		Guid guid = null;
 		guid = this.defineGuid(pCode.getInput(1));
 		String interfaceName = null;
@@ -235,40 +267,33 @@ public class EfiSeek extends EfiUtils {
 			interfaceName = "unknownProtocol_" + guid.toString().substring(0, 8);
 
 		this.varnodeConverter.newVarnode(pCode.getInput(3));
-
 		if (varnodeConverter.isGlobal()) {
-			String name = this.getSymbolAt(varnodeConverter.getGlobalAddress()).getName();
-			if (name.substring(0, 2) == "EFI") {
-				return;
-			}
-			this.defineData(varnodeConverter.getGlobalAddress(), interfaceType, "g" + interfaceName + this.nameCount,
+			this.defineData(varnodeConverter.getGlobalAddress(), interfaceType, "g" + interfaceName + "_" + this.nameCount,
 					null);
 			this.nameCount++;
 		} else if (varnodeConverter.isLocal()) {
-			String name = varnodeConverter.getVariable().getName();
-			if (name.substring(0, 2) == "EFI") {
-				return;
-			}
-			varnodeConverter.getVariable().setName(interfaceName + this.nameCount, SourceType.USER_DEFINED);
-			varnodeConverter.getVariable().setDataType(interfaceType, SourceType.USER_DEFINED);
+			this.defineVar(varnodeConverter.getVariable(), interfaceType, interfaceName + this.nameCount);
 			this.nameCount++;
 		}
-		this.locateProtocol.put(guid.toString(), pCode.getParent().getStart());
+		Address pCodeAddress = pCode.getSeqnum().getTarget();
+		JSONObject protocol = new JSONObject();
+		protocol.put("name", interfaceName);
+		protocol.put("function", this.getFunctionBefore(pCodeAddress).getName());
+		protocol.put("guid", guid.toString());
+		this.locateProtocol.put(pCodeAddress.toString(), protocol);
 	}
 
 	private void installProtocol(PcodeOpAST pCode) throws Exception {
-		if (pCode.getInputs().length != 5) {
-			Msg.error(this, "Wrong number of parameters for installProtocol func"
-					+ pCode.getInput(0).getHigh().getHighFunction().getFunction().getName());
+		pCode = this.checkFuncParams(pCode, "EFI_INSTALL_PROTOCOL_INTERFACE" , 4);
+		
+		if(pCode == null) {
 			return;
 		}
 
 		this.varnodeConverter.newVarnode(pCode.getInput(1));
 
 		if (varnodeConverter.isLocal()) {
-			varnodeConverter.getVariable().setName("Handle" + this.nameCount, SourceType.USER_DEFINED);
-			varnodeConverter.getVariable().setDataType(this.uefiHeadersArchive.getDataType("/behemot.h/EFI_HANDLE *"),
-					SourceType.USER_DEFINED);
+			this.defineVar(varnodeConverter.getVariable(), this.uefiHeadersArchive.getDataType("/behemot.h/EFI_HANDLE *"), "Handle" + this.nameCount);
 			this.nameCount++;
 		} else if (varnodeConverter.isGlobal()) {
 			this.defineData(varnodeConverter.getGlobalAddress(),
@@ -277,112 +302,178 @@ public class EfiSeek extends EfiUtils {
 			this.nameCount++;
 		}
 		Guid guid = defineGuid(pCode.getInput(2));
-		String strGuid = "None";
+		String strGuid = "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF";
+		String interfaceName = null;
+		DataType interfaceType = null;
+		
 		if (guid != null) {
+			if (this.guids.containsKey(guid.toString())) {
+				interfaceName = this.guidNameToProtocolName(this.guids.get(guid.toString()));
+			}
 			strGuid = guid.toString();
 			Msg.info(this, strGuid);
 		}
-		this.installProtocol.put(strGuid, pCode.getParent().getStart());
-	}
-
-	private void getSmstLocation2(PcodeOpAST pCode) throws Exception {
-		if (pCode.getInputs().length != 3) {
-			Msg.error(this, "Wrong number of parameters for getSmstLocation2 func "
-					+ pCode.getInput(0).getHigh().getHighFunction().getFunction().getName());
-			return;
-		}
-		this.varnodeConverter.newVarnode(pCode.getInput(2));
-
-		DataType smstType = this.uefiHeadersArchive.getDataType("/behemot.h/EFI_SMM_SYSTEM_TABLE2 *");
-		if (varnodeConverter.isGlobal()) {
-			this.defineData(varnodeConverter.getGlobalAddress(), smstType, "gSmst" + this.nameCount, null);
-		} else if (varnodeConverter.isLocal()) {
-			varnodeConverter.getVariable().setName("Smst" + this.nameCount, SourceType.USER_DEFINED);
-			this.nameCount++;
-			varnodeConverter.getVariable().setDataType(smstType, SourceType.USER_DEFINED);
-		}
+		if (interfaceType == null)
+			interfaceType = this.uefiHeadersArchive.getDataType("/behemot.h/INT64 *");
+		if (interfaceName == null)
+			interfaceName = "unknownProtocol_" + strGuid.substring(0, 8);
+		
+		this.varnodeConverter.newVarnode(pCode.getInput(4));
+		
+			if (varnodeConverter.isGlobal()) {
+				interfaceType = this.uefiHeadersArchive.getDataType(
+						"/behemot.h/" + interfaceName);
+				if (interfaceType == null) {
+					interfaceType = this.uefiHeadersArchive.getDataType("/behemot.h/INT64");
+				}
+				this.defineData(varnodeConverter.getGlobalAddress(), interfaceType, "g" + interfaceName + "_" + this.nameCount,
+						null);
+				this.nameCount++;
+			} else if (varnodeConverter.isLocal()) {
+				this.defineVar(varnodeConverter.getVariable(), interfaceType, interfaceName + this.nameCount);
+				this.nameCount++;
+			}
+		
+		Address pCodeAddress = pCode.getSeqnum().getTarget();
+		
+		JSONObject protocol = new JSONObject();
+		protocol.put("name", interfaceName);
+		protocol.put("function", this.getFunctionBefore(pCodeAddress).getName());
+		protocol.put("guid", strGuid);
+		this.installProtocol.put(pCodeAddress.toString(), protocol);
 	}
 
 	private void Reg2(PcodeOpAST pCode) throws Exception {
-		if (pCode.getInputs().length != 5) {
-			Msg.error(this, "Wrong number of parameters for swReg func "
-					+ pCode.getInput(0).getHigh().getHighFunction().getFunction().getName());
-			this.regInterrupt.put("Unknown", this.toAddr(0));
-			return;
-		}
-		this.varnodeConverter.newVarnode(pCode.getInput(2));
-
+				
 		FunctionDefinition funcProt = (FunctionDefinition) this.uefiHeadersArchive
 				.getDataType("/behemot.h/functions/EFI_SMM_HANDLER_ENTRY_POINT2");
+		JSONObject root = this.hwSmi;
 		String name = null;
+		String fdefName = null;	
+		Address addrFunc = null;
+		
+		
+		switch (pCode.getInput(0).getHigh().getDataType().getName()) {
+		case ("EFI_SMM_POWER_BUTTON_REGISTER2"):
+			name = "pwrButtonHandler";
+			fdefName = "EFI_SMM_POWER_BUTTON_REGISTER2";
+			break;
+		case ("EFI_SMM_SX_REGISTER2"):
+			name = "sxHandler";
+			fdefName = "EFI_SMM_SX_REGISTER2";
+			break;
+		case ("EFI_SMM_SW_REGISTER2"):
+			name = "swSmiHandler";
+			root = this.swSmi;
+			fdefName = "EFI_SMM_SW_REGISTER2";
+			break;
+		case ("EFI_SMM_PERIODIC_TIMER_REGISTER2"):
+			name = "periodicTimerHandler";
+			fdefName = "EFI_SMM_PERIODIC_TIMER_REGISTER2";
+			break;
+		case ("EFI_SMM_USB_REGISTER2"):
+			name = "usbHandler";
+			fdefName = "EFI_SMM_USB_REGISTER2";
+			break;
+		case ("EFI_SMM_IO_TRAP_DISPATCH2_REGISTER"):
+			name = "ioTrapHandler";
+			fdefName = "EFI_SMM_IO_TRAP_DISPATCH2_REGISTER";
+			break;
+		case ("EFI_SMM_GPI_REGISTER2"):
+			name = "gpiHandler";
+			fdefName = "EFI_SMM_GPI_REGISTER2";
+			break;
+		case ("EFI_SMM_STANDBY_BUTTON_REGISTER2"):
+			name = "standbyButtonHandler";
+			fdefName = "EFI_SMM_STANDBY_BUTTON_REGISTER2";
+			break;
+		default:
+			name = "otherSMI";
+			fdefName = null;
+			break;
+		}
+			
+		pCode = this.checkFuncParams(pCode, fdefName, 3);
+		
+		if(pCode == null) {
+			return;
+		}		
+		
+		this.varnodeConverter.newVarnode(pCode.getInput(2));
+		
 		if (varnodeConverter.isGlobal()) {
-			switch (pCode.getInput(0).getHigh().getDataType().getName()) {
-			case ("EFI_SMM_POWER_BUTTON_REGISTER2"):
-				name = "pwrButtonHandler";
-				break;
-			case ("EFI_SMM_SX_REGISTER2"):
-				name = "sxHandler";
-				break;
-			case ("EFI_SMM_SW_REGISTER2"):
-				name = "swSmiHandler";
-				break;
-			case ("EFI_SMM_PERIODIC_TIMER_REGISTER2"):
-				name = "periodicTimerHandler";
-				break;
-			case ("EFI_SMM_USB_REGISTER2"):
-				name = "usbHandler";
-				break;
-			case ("EFI_SMM_IO_TRAP_DISPATCH2_REGISTER"):
-				name = "ioTrapHandler";
-				break;
-			case ("EFI_SMM_GPI_REGISTER2"):
-				name = "gpiHandler";
-				break;
-			case ("EFI_SMM_STANDBY_BUTTON_REGISTER2"):
-				name = "standbyButtonHandler";
-				break;
-			}
-			Address addrFunc = varnodeConverter.getGlobalAddress();
+			addrFunc = varnodeConverter.getGlobalAddress();
 			if (varnodeConverter.isRef()) {
 				addrFunc = readAddr(varnodeConverter.getGlobalAddress());
 			}
-			this.createFunctionFormDifinition(addrFunc, funcProt, name + this.nameCount);
+			name = name + this.nameCount;
+			this.createFunctionFormDifinition(addrFunc, funcProt, name);
 			this.nameCount++;
 		}
-		this.regInterrupt.put(name, pCode.getParent().getStart());
-	}
+		
+		Address pCodeAddress = pCode.getSeqnum().getTarget();
 
+		JSONObject iter = new JSONObject();
+		iter.put("function name", name);
+		iter.put("function address", addrFunc);
+		root.put(pCodeAddress.toString(), iter);
+	}
+	
 	private void childIterReg(PcodeOpAST pCode) throws Exception {
-		if (pCode.getInputs().length != 4) {
-			Msg.error(this, "Wrong number of parameters for childIterReg func "
-					+ pCode.getInput(0).getHigh().getHighFunction().getFunction().getName());
-			this.regInterrupt.put("", this.toAddr(0));
+		pCode = this.checkFuncParams(pCode, "EFI_SMM_INTERRUPT_REGISTER", 3);
+		
+		if(pCode == null) {
 			return;
 		}
+		
 		this.varnodeConverter.newVarnode(pCode.getInput(1));
 
 		FunctionDefinition funcProt = (FunctionDefinition) this.uefiHeadersArchive
 				.getDataType("/behemot.h/functions/EFI_SMM_HANDLER_ENTRY_POINT2");
+		Address funcAddr = null;
+		String funcName = "";
+		
 		if (varnodeConverter.isGlobal()) {
-			this.createFunctionFormDifinition(varnodeConverter.getGlobalAddress(), funcProt,
-					"ChildSmiHandler" + this.nameCount);
+			funcName = "ChildSmiHandler" + this.nameCount;
+			funcAddr = varnodeConverter.getGlobalAddress();
+			this.createFunctionFormDifinition(funcAddr, funcProt,
+					funcName);
 			this.nameCount++;
 		}
-		String strGuid = "None";
+		String strGuid = "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF";
 		Guid guid = this.defineGuid(pCode.getInput(2));
-		if (guid != null)
+		String name = "";
+		
+		if (guid != null) {
+			if (this.guids.containsKey(guid.toString())) {
+				name = this.guidNameToProtocolName(this.guids.get(guid.toString()));
+			}
 			strGuid = guid.toString();
+		}
+		
+		JSONObject iter = new JSONObject();
+		iter.put("guid", strGuid);
+		iter.put("name", name);
+		if(funcAddr !=null) {
+			iter.put("function address", funcAddr.toString());
+			iter.put("function name", funcName);
+		}
+		else {
+			iter.put("function address", "");
+			iter.put("function name", "");
+		}
 
-		this.childSmi.put(strGuid, pCode.getParent().getStart());
+		this.childSmi.put(pCode.getParent().getStart().toString(), iter);
 	}
 
 	private void regProtocolNotify(PcodeOpAST pCode) throws Exception {
-		if (pCode.getInputs().length != 4) {
-			Msg.error(this, "Wrong number of parameters for regProtocolNotify func "
-					+ pCode.getInput(0).getHigh().getHighFunction().getFunction().getName());
+		pCode = this.checkFuncParams(pCode, "EFI_REGISTER_PROTOCOL_NOTIFY", 3);
+		
+		if(pCode == null) {
 			return;
 		}
-		String strGuid = "None";
+		
+		String strGuid = "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF";
 		Guid guid = this.defineGuid(pCode.getInput(1));
 		if (guid != null) {
 			strGuid = guid.toString();
@@ -396,6 +487,68 @@ public class EfiSeek extends EfiUtils {
 					"notify_" + strGuid.substring(0, 8));
 		}
 
+	}
+	
+	private PcodeOpAST checkFuncParams(PcodeOpAST pCode, String fdefName, Integer correctNumberOfParams) throws ParseException {
+		Program program = this.currentProgram;
+		Function func = this.getFunctionBefore(pCode.getParent().getStop());
+		Address addr = pCode.getSeqnum().getTarget();
+		FunctionSignature fdef = null;
+		
+		if (fdefName == null) {
+			DataTypeManager dtm = this.currentProgram.getDataTypeManager();
+			CParser parser = new CParser(dtm);
+			fdefName = "";
+			for (Integer i = 0; i < correctNumberOfParams; i++) {
+				fdefName = fdefName + "void * param" + i + ", ";
+			}
+			fdefName = "EFI_STATUS func(" + fdefName.substring(0, fdefName.length() - 2) + ");";
+				fdef = (FunctionSignature)parser.parse(fdefName);
+		}
+		else {
+			fdef = (FunctionSignature)this.uefiHeadersArchive.getDataType("/behemot.h/functions/" + fdefName);
+		}
+		
+		correctNumberOfParams = fdef.getArguments().length;
+		if(correctNumberOfParams != pCode.getNumInputs() - 1) {
+			Msg.warn(this, "Wrong number of the parameters for" + fdefName + " func at the address: " + pCode.getSeqnum().getTarget().toString());
+			Msg.warn(this, "Trying to recover");
+			int transaction = program.startTransaction("Override Signature");
+			boolean commit = false;
+			try {
+				HighFunctionDBUtil.writeOverride(func, addr, fdef);
+				commit = true;
+			}
+			catch (Exception e) {
+				Msg.error(this, "Error overriding signature: " + e);
+			}
+			finally {
+				program.endTransaction(transaction, commit);
+			}
+			pCode = updateCallIndPcode(pCode);
+			if(correctNumberOfParams != pCode.getNumInputs() - 1) {
+				Msg.error(this, "Recovery failed");
+				return null;
+			}
+		}
+		return pCode;
+	}
+	
+	private PcodeOpAST updateCallIndPcode(PcodeOpAST pCode) {
+		DecompInterface decomp = new DecompInterface();
+		decomp.openProgram(this.getCurrentProgram());
+		
+		DecompileResults res = decomp.decompileFunction(this.getFunctionBefore(pCode.getParent().getStop()), 60, this.monitor);
+		HighFunction highFunc = res.getHighFunction();
+		
+		Iterator<PcodeOpAST> pCodeAtAddr = highFunc.getPcodeOps(pCode.getSeqnum().getTarget());
+		while(pCodeAtAddr.hasNext()) {
+			PcodeOpAST currentPcode = pCodeAtAddr.next();
+			if (currentPcode.getOpcode() ==  PcodeOp.CALLIND) {
+				return currentPcode;
+			}
+		}
+		return pCode;
 	}
 
 	private Guid defineGuid(Varnode guidVar) throws Exception {
@@ -414,14 +567,12 @@ public class EfiSeek extends EfiUtils {
 			}
 			this.defineData(guidAddr, this.uefiHeadersArchive.getDataType("/behemot.h/EFI_GUID"), name, null);
 		} else if (varnodeConverter.isLocal()) {
-			name = "Guid" + this.nameCount;
-			varnodeConverter.getVariable().setName(name, SourceType.USER_DEFINED);
-			varnodeConverter.getVariable().setDataType(this.uefiHeadersArchive.getDataType("/behemot.h/EFI_GUID"),
-					false, true, SourceType.USER_DEFINED);
+			this.defineVar(varnodeConverter.getVariable(), this.uefiHeadersArchive.getDataType("/behemot.h/EFI_GUID"), "Guid" + this.nameCount);
+			this.nameCount++;
 		}
 		return guid;
 	}
-
+	
 	public void defineUefiFunctions() throws Exception {
 
 		DecompInterface decomp = new DecompInterface();
@@ -467,6 +618,15 @@ public class EfiSeek extends EfiUtils {
 					j--;
 					size = funcWithCallInd.size();
 				}
+				else {
+					if(this.decompileFunction.containsKey(funcWithCallInd.get(j))){
+						this.decompileFunction.remove(funcWithCallInd.get(j));
+						this.decompileFunction.put(funcWithCallInd.get(j), res);
+					}
+					else {
+						this.decompileFunction.put(funcWithCallInd.get(j), res);
+					}					
+				}
 			}
 			Iterator<PcodeOpAST> callIndIter = callInd.iterator();
 			while (callIndIter.hasNext()) {
@@ -509,27 +669,55 @@ public class EfiSeek extends EfiUtils {
 			}
 		}
 		decomp.closeProgram();
+		this.createMeta();
 		if (this.currentProgram.isLocked() == false)
 			saveMeta();
 	}
 
+	private void createMeta() {
+		 this.meta.put("locate protocol", this.locateProtocol);
+		 this.meta.put("locate protocol", this.locateProtocol);
+		 this.meta.put("install protocol", this.installProtocol);
+		 
+		 this.interrupts.put("child", this.childSmi);
+		 this.interrupts.put("swSmi", this.swSmi);
+		 this.interrupts.put("hwSmi", this.hwSmi);
+		 
+		 this.meta.put("interrupts", this.interrupts);
+	}
+	
+	private void getMeta() {
+		MemoryBlock metaBlock = this.getMemoryBlock("metaBlock");
+		if(metaBlock != null) {
+			byte[] raw = new byte[(int) metaBlock.getSize()];
+			try {
+				metaBlock.getBytes(metaBlock.getStart(), raw);
+			} catch (MemoryAccessException e) {
+				Msg.info(this, "Can't read metaBlock");
+				e.printStackTrace();
+				return;
+			}
+			String metaStr = new String(raw);
+			this.meta = new JSONObject(metaStr);
+			this.locateProtocol = meta.getJSONObject("locate protocol");
+			this.installProtocol = meta.getJSONObject("install protocol");
+			this.interrupts = meta.getJSONObject("interrupts");
+			this.childSmi = interrupts.getJSONObject("child");
+			this.swSmi = interrupts.getJSONObject("swSmi");
+			this.hwSmi = interrupts.getJSONObject("hwSmi");
+		}
+	}
+	
 	private void saveMeta() {
-
-		MemoryBlock childSmiBlock = this.getMemoryBlock("childSmi");
-		MemoryBlock locateProtocolBlock = this.getMemoryBlock("locateProtocol");
-		MemoryBlock regInterruptBlock = this.getMemoryBlock("regInterrupt");
-		MemoryBlock installProtocolBlock = this.getMemoryBlock("installProtocol");
+		MemoryBlock metaBlock = this.getMemoryBlock("metaBlock");
 		try {
-			if (!this.childSmi.isEmpty() && childSmiBlock == null)
-				this.createMemoryBlock("childSmi", this.toAddr(0), this.childSmi.toString().getBytes(), true);
-			if (!this.locateProtocol.isEmpty() && locateProtocolBlock == null)
-				this.createMemoryBlock("locateProtocol", this.toAddr(0), this.locateProtocol.toString().getBytes(),
-						true);
-			if (!this.regInterrupt.isEmpty() && regInterruptBlock == null)
-				this.createMemoryBlock("regInterrupt", this.toAddr(0), this.regInterrupt.toString().getBytes(), true);
-			if (!this.installProtocol.isEmpty() && installProtocolBlock == null)
-				this.createMemoryBlock("installProtocol", this.toAddr(0), this.installProtocol.toString().getBytes(),
-						true);
+			if(metaBlock == null) {
+				this.createMemoryBlock("metaBlock", this.toAddr(0), this.meta.toString().getBytes(), true);
+			}
+			else {
+				this.removeMemoryBlock(metaBlock);
+				this.createMemoryBlock("metaBlock", this.toAddr(0), this.meta.toString().getBytes(), true);
+			}
 		} catch (Exception e) {
 			Msg.error(this, "Can't create memory block with meta. Operation requires exclusive access to object.");
 		}
