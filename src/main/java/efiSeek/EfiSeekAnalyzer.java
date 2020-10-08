@@ -102,9 +102,7 @@ public class EfiSeekAnalyzer extends AbstractAnalyzer {
 			Msg.error(this, "Unknown arch");
 			return false;
 		}
-		if (machine == MachineConstants.IMAGE_FILE_MACHINE_AMD64) {
-			this.gdtFileName = "BehemotX64.gdt";
-		}
+
 		FlatProgramAPI flatProgramAPI = new FlatProgramAPI(program);
 		if (program.isLocked() == false) {
 			try {
