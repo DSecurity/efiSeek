@@ -12,7 +12,7 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-package efiseek;
+package efiSeek;
 
 
 
@@ -102,7 +102,6 @@ public class EfiSeekAnalyzer extends AbstractAnalyzer {
 			Msg.error(this, "Unknown arch");
 			return false;
 		}
-
 		FlatProgramAPI flatProgramAPI = new FlatProgramAPI(program);
 		if (program.isLocked() == false) {
 			try {
