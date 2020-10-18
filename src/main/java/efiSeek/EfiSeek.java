@@ -12,7 +12,7 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-package efiseek;
+package efiSeek;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -57,6 +57,7 @@ import ghidra.util.task.TaskMonitor;
 
 public class EfiSeek extends EfiUtils {
 	private Memory mem;
+	private Address imageBase;
 	private FileDataTypeManager uefiHeadersArchive = null;
 	private Path guidBasePath = null;
 	private HashMap<String, String> guids = new HashMap<>();
@@ -78,6 +79,7 @@ public class EfiSeek extends EfiUtils {
 
 	public EfiSeek(Program prog, String gdtFileName) {
 		this.currentProgram = prog;
+		this.imageBase = prog.getImageBase();
 		this.monitor = TaskMonitor.DUMMY;
 		this.mem = getCurrentProgram().getMemory();
 		this.varnodeConverter = new VarnodeConverter(prog);
@@ -276,11 +278,13 @@ public class EfiSeek extends EfiUtils {
 			this.nameCount++;
 		}
 		Address pCodeAddress = pCode.getSeqnum().getTarget();
+		long pCodeOffset = pCodeAddress.subtract(this.imageBase);
+
 		JSONObject protocol = new JSONObject();
 		protocol.put("name", interfaceName);
-		protocol.put("function", this.getFunctionBefore(pCodeAddress).getName());
+		protocol.put("function name", this.getFunctionBefore(pCodeAddress).getName());
 		protocol.put("guid", guid.toString());
-		this.locateProtocol.put(pCodeAddress.toString(), protocol);
+		this.locateProtocol.put(String.valueOf(pCodeOffset), protocol);
 	}
 
 	private void installProtocol(PcodeOpAST pCode) throws Exception {
@@ -335,12 +339,13 @@ public class EfiSeek extends EfiUtils {
 			}
 		
 		Address pCodeAddress = pCode.getSeqnum().getTarget();
-		
+		long pCodeOffset = pCodeAddress.subtract(this.imageBase);
+
 		JSONObject protocol = new JSONObject();
 		protocol.put("name", interfaceName);
-		protocol.put("function", this.getFunctionBefore(pCodeAddress).getName());
+		protocol.put("function name", this.getFunctionBefore(pCodeAddress).getName());
 		protocol.put("guid", strGuid);
-		this.installProtocol.put(pCodeAddress.toString(), protocol);
+		this.installProtocol.put(String.valueOf(pCodeOffset), protocol);
 	}
 
 	private void Reg2(PcodeOpAST pCode) throws Exception {
@@ -348,47 +353,47 @@ public class EfiSeek extends EfiUtils {
 		FunctionDefinition funcProt = (FunctionDefinition) this.uefiHeadersArchive
 				.getDataType("/behemot.h/functions/EFI_SMM_HANDLER_ENTRY_POINT2");
 		JSONObject root = this.hwSmi;
-		String name = null;
+		String funcName = null;
 		String fdefName = null;	
-		Address addrFunc = null;
+		Address funcAddress = null;
 		
 		
 		switch (pCode.getInput(0).getHigh().getDataType().getName()) {
 		case ("EFI_SMM_POWER_BUTTON_REGISTER2"):
-			name = "pwrButtonHandler";
+			funcName = "pwrButtonHandler";
 			fdefName = "EFI_SMM_POWER_BUTTON_REGISTER2";
 			break;
 		case ("EFI_SMM_SX_REGISTER2"):
-			name = "sxHandler";
+			funcName = "sxHandler";
 			fdefName = "EFI_SMM_SX_REGISTER2";
 			break;
 		case ("EFI_SMM_SW_REGISTER2"):
-			name = "swSmiHandler";
+			funcName = "swSmiHandler";
 			root = this.swSmi;
 			fdefName = "EFI_SMM_SW_REGISTER2";
 			break;
 		case ("EFI_SMM_PERIODIC_TIMER_REGISTER2"):
-			name = "periodicTimerHandler";
+			funcName = "periodicTimerHandler";
 			fdefName = "EFI_SMM_PERIODIC_TIMER_REGISTER2";
 			break;
 		case ("EFI_SMM_USB_REGISTER2"):
-			name = "usbHandler";
+			funcName = "usbHandler";
 			fdefName = "EFI_SMM_USB_REGISTER2";
 			break;
 		case ("EFI_SMM_IO_TRAP_DISPATCH2_REGISTER"):
-			name = "ioTrapHandler";
+			funcName = "ioTrapHandler";
 			fdefName = "EFI_SMM_IO_TRAP_DISPATCH2_REGISTER";
 			break;
 		case ("EFI_SMM_GPI_REGISTER2"):
-			name = "gpiHandler";
+			funcName = "gpiHandler";
 			fdefName = "EFI_SMM_GPI_REGISTER2";
 			break;
 		case ("EFI_SMM_STANDBY_BUTTON_REGISTER2"):
-			name = "standbyButtonHandler";
+			funcName = "standbyButtonHandler";
 			fdefName = "EFI_SMM_STANDBY_BUTTON_REGISTER2";
 			break;
 		default:
-			name = "otherSMI";
+			funcName = "otherSMI";
 			fdefName = null;
 			break;
 		}
@@ -402,21 +407,29 @@ public class EfiSeek extends EfiUtils {
 		this.varnodeConverter.newVarnode(pCode.getInput(2));
 		
 		if (varnodeConverter.isGlobal()) {
-			addrFunc = varnodeConverter.getGlobalAddress();
+			funcAddress = varnodeConverter.getGlobalAddress();
 			if (varnodeConverter.isRef()) {
-				addrFunc = readAddr(varnodeConverter.getGlobalAddress());
+				funcAddress = readAddr(varnodeConverter.getGlobalAddress());
 			}
-			name = name + this.nameCount;
-			this.createFunctionFormDifinition(addrFunc, funcProt, name);
+			funcName = funcName + this.nameCount;
+			this.createFunctionFormDifinition(funcAddress, funcProt, funcName);
 			this.nameCount++;
 		}
 		
 		Address pCodeAddress = pCode.getSeqnum().getTarget();
+		long pCodeOffset = pCodeAddress.subtract(this.imageBase);
 
 		JSONObject iter = new JSONObject();
-		iter.put("function name", name);
-		iter.put("function address", addrFunc);
-		root.put(pCodeAddress.toString(), iter);
+		if(funcAddress !=null) {
+			long funcOffset = funcAddress.subtract(this.imageBase);
+			iter.put("function offset", String.valueOf(funcOffset));
+			iter.put("function name", funcName);
+		}
+		else {
+			iter.put("function offset", "");
+			iter.put("function name", "");
+		}
+		root.put(String.valueOf(pCodeOffset), iter);
 	}
 	
 	private void childIterReg(PcodeOpAST pCode) throws Exception {
@@ -430,13 +443,13 @@ public class EfiSeek extends EfiUtils {
 
 		FunctionDefinition funcProt = (FunctionDefinition) this.uefiHeadersArchive
 				.getDataType("/behemot.h/functions/EFI_SMM_HANDLER_ENTRY_POINT2");
-		Address funcAddr = null;
+		Address funcAddress = null;
 		String funcName = "";
 		
 		if (varnodeConverter.isGlobal()) {
 			funcName = "ChildSmiHandler" + this.nameCount;
-			funcAddr = varnodeConverter.getGlobalAddress();
-			this.createFunctionFormDifinition(funcAddr, funcProt,
+			funcAddress = varnodeConverter.getGlobalAddress();
+			this.createFunctionFormDifinition(funcAddress, funcProt,
 					funcName);
 			this.nameCount++;
 		}
@@ -450,20 +463,21 @@ public class EfiSeek extends EfiUtils {
 			}
 			strGuid = guid.toString();
 		}
-		
+
 		JSONObject iter = new JSONObject();
 		iter.put("guid", strGuid);
 		iter.put("name", name);
-		if(funcAddr !=null) {
-			iter.put("function address", funcAddr.toString());
+		if(funcAddress !=null) {
+			long funcOffset = funcAddress.subtract(this.imageBase);
+			iter.put("function offset", String.valueOf(funcOffset));
 			iter.put("function name", funcName);
 		}
 		else {
-			iter.put("function address", "");
+			iter.put("function offset", "");
 			iter.put("function name", "");
 		}
-
-		this.childSmi.put(pCode.getParent().getStart().toString(), iter);
+		long pCodeOffset = pCode.getParent().getStart().subtract(this.imageBase);
+		this.childSmi.put(String.valueOf(pCodeOffset), iter);
 	}
 
 	private void regProtocolNotify(PcodeOpAST pCode) throws Exception {
@@ -711,13 +725,10 @@ public class EfiSeek extends EfiUtils {
 	private void saveMeta() {
 		MemoryBlock metaBlock = this.getMemoryBlock("metaBlock");
 		try {
-			if(metaBlock == null) {
-				this.createMemoryBlock("metaBlock", this.toAddr(0), this.meta.toString().getBytes(), true);
-			}
-			else {
+			if (metaBlock != null) {
 				this.removeMemoryBlock(metaBlock);
-				this.createMemoryBlock("metaBlock", this.toAddr(0), this.meta.toString().getBytes(), true);
 			}
+			this.createMemoryBlock("metaBlock", this.toAddr(0), this.meta.toString().getBytes(), true);
 		} catch (Exception e) {
 			Msg.error(this, "Can't create memory block with meta. Operation requires exclusive access to object.");
 		}
