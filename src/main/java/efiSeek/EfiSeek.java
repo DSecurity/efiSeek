@@ -19,11 +19,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.*;
 
+import ghidra.program.model.data.*;
+import ghidra.util.exception.CancelledException;
 import org.json.JSONObject;
 
 import ghidra.framework.Application;
@@ -33,10 +32,6 @@ import ghidra.app.decompiler.DecompileResults;
 import ghidra.app.util.cparser.C.CParser;
 import ghidra.app.util.cparser.C.ParseException;
 import ghidra.program.model.address.Address;
-import ghidra.program.model.data.DataType;
-import ghidra.program.model.data.DataTypeManager;
-import ghidra.program.model.data.FileDataTypeManager;
-import ghidra.program.model.data.FunctionDefinition;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionSignature;
 import ghidra.program.model.listing.Program;
@@ -48,6 +43,7 @@ import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.pcode.HighFunctionDBUtil;
+import static ghidra.program.model.data.DataTypeConflictHandler.*;
 
 
 
@@ -58,7 +54,7 @@ import ghidra.util.task.TaskMonitor;
 public class EfiSeek extends EfiUtils {
 	private Memory mem;
 	private Address imageBase;
-	private FileDataTypeManager uefiHeadersArchive = null;
+	private DataTypeManager uefiHeadersArchive = null;
 	private Path guidBasePath = null;
 	private HashMap<String, String> guids = new HashMap<>();
 	private Integer nameCount = 0;
@@ -85,9 +81,15 @@ public class EfiSeek extends EfiUtils {
 		this.varnodeConverter = new VarnodeConverter(prog);
  
 		try {
-			this.uefiHeadersArchive = FileDataTypeManager
+			FileDataTypeManager externalHeadersArchive = FileDataTypeManager
 					.openFileArchive(Application.getModuleDataFile("efiSeek", gdtFileName), false);
-		} catch (IOException e) {
+			List<DataType> allHeaders = new ArrayList<DataType>();
+			externalHeadersArchive.getAllDataTypes(allHeaders);
+
+			this.uefiHeadersArchive = prog.getDataTypeManager();
+			this.uefiHeadersArchive.addDataTypes(allHeaders, KEEP_HANDLER, this.monitor);
+
+		} catch (IOException | CancelledException e) {
 			Msg.error(this, "error open " + gdtFileName);
 			e.printStackTrace();
 			return;
