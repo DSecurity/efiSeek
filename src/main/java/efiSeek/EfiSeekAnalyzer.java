@@ -16,7 +16,7 @@ package efiSeek;
 
 
 
-import generic.continues.RethrowContinuesFactory;
+import ghidra.app.util.bin.ByteProvider;
 import ghidra.app.services.AbstractAnalyzer;
 import ghidra.app.services.AnalyzerType;
 import ghidra.app.util.importer.MessageLog;
@@ -29,7 +29,7 @@ import ghidra.program.model.address.AddressSetView;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.mem.MemoryBlock;
 import ghidra.app.util.bin.ByteArrayProvider;
-import ghidra.app.util.bin.format.FactoryBundledWithBinaryReader;
+import ghidra.app.util.bin.BinaryReader;
 import ghidra.app.util.bin.format.pe.NTHeader;
 import ghidra.app.util.bin.format.pe.OptionalHeader;
 import ghidra.app.util.bin.format.pe.PortableExecutable;
@@ -69,12 +69,12 @@ public class EfiSeekAnalyzer extends AbstractAnalyzer {
 				}
 				bytesRead += block.getBytes(block.getStart(), blockBytes, bytesRead, (int) block.getSize());
 			}
-			FactoryBundledWithBinaryReader reader = new FactoryBundledWithBinaryReader(
-					RethrowContinuesFactory.INSTANCE, new ByteArrayProvider(blockBytes),
-					!program.getLanguage().isBigEndian());
+			BinaryReader reader = new BinaryReader(
+				new ByteArrayProvider(blockBytes),
+				!program.getLanguage().isBigEndian());
 			int ntHeaderOffset = reader.readInt(0x3C);
-			ntHeader = NTHeader.createNTHeader(reader, ntHeaderOffset,
-			PortableExecutable.SectionLayout.FILE, false, false);
+			ntHeader = new NTHeader(reader, ntHeaderOffset,
+							PortableExecutable.SectionLayout.FILE, false, false);
 		} catch (Exception e) {
 			return false;
 		}
