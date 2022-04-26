@@ -56,27 +56,34 @@ public class EfiSeekAnalyzer extends AbstractAnalyzer {
 
 	@Override
 	public boolean canAnalyze(Program program) {
-		if (program.getExecutableFormat().equals(PeLoader.PE_NAME)) {
-			try {
-				MemoryBlock peHeaders = program.getMemory().getBlock(PeLoader.HEADERS);
-				byte[] blockBytes = new byte[(int) peHeaders.getSize()];
-				peHeaders.getBytes(peHeaders.getStart(), blockBytes);
-				FactoryBundledWithBinaryReader reader = new FactoryBundledWithBinaryReader(
-						RethrowContinuesFactory.INSTANCE, new ByteArrayProvider(blockBytes), true);
-				int ntHeaderOffset = reader.readInt(0x3C);
-				ntHeader = NTHeader.createNTHeader(reader, ntHeaderOffset, PortableExecutable.SectionLayout.FILE, false,
-						false);
-			} catch (Exception e) {
-				// ignore
-			}
-
-			OptionalHeader optionalHeader = ntHeader.getOptionalHeader();
-
-			int subsystem = optionalHeader.getSubsystem();
-			if (subsystem >= 10 && subsystem <= 13) {
-				return true;
-			}
+		if (!program.getExecutableFormat().equals(PeLoader.PE_NAME)) {
 			return false;
+		}
+
+		try {
+			byte[] blockBytes = new byte[(int) program.getMemory().getSize()];
+			int bytesRead = 0;
+			for (MemoryBlock block : program.getMemory().getBlocks()) {
+				if (!block.isInitialized()) {
+					continue;
+				}
+				bytesRead += block.getBytes(block.getStart(), blockBytes, bytesRead, (int) block.getSize());
+			}
+			FactoryBundledWithBinaryReader reader = new FactoryBundledWithBinaryReader(
+					RethrowContinuesFactory.INSTANCE, new ByteArrayProvider(blockBytes),
+					!program.getLanguage().isBigEndian());
+			int ntHeaderOffset = reader.readInt(0x3C);
+			ntHeader = NTHeader.createNTHeader(reader, ntHeaderOffset,
+			PortableExecutable.SectionLayout.FILE, false, false);
+		} catch (Exception e) {
+			return false;
+		}
+
+		OptionalHeader optionalHeader = ntHeader.getOptionalHeader();
+
+		int subsystem = optionalHeader.getSubsystem();
+		if (subsystem >= 10 && subsystem <= 13) {
+			return true;
 		}
 		return false;
 	}

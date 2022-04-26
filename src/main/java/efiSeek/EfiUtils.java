@@ -21,7 +21,6 @@ import ghidra.app.util.bin.ByteArrayProvider;
 import ghidra.app.util.bin.format.FactoryBundledWithBinaryReader;
 import ghidra.app.util.bin.format.pe.NTHeader;
 import ghidra.app.util.bin.format.pe.PortableExecutable;
-import ghidra.app.util.opinion.PeLoader;
 import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
@@ -101,13 +100,21 @@ public abstract class EfiUtils extends FlatProgramAPI {
 
 	public final Address getEntryPoint() throws Exception {
 		NTHeader ntHeader = null;
-		MemoryBlock peHeaders = getCurrentProgram().getMemory().getBlock(PeLoader.HEADERS);
-		byte[] blockBytes = new byte[(int) peHeaders.getSize()];
-		peHeaders.getBytes(peHeaders.getStart(), blockBytes);
-		FactoryBundledWithBinaryReader reader = new FactoryBundledWithBinaryReader(RethrowContinuesFactory.INSTANCE,
-				new ByteArrayProvider(blockBytes), true);
+		byte[] blockBytes = new byte[(int) getCurrentProgram().getMemory().getSize()];
+		int bytesRead = 0;
+		for (MemoryBlock block : getCurrentProgram().getMemory().getBlocks()) {
+			if (!block.isInitialized()) {
+				continue;
+			}
+			bytesRead += block.getBytes(block.getStart(), blockBytes, bytesRead, (int) block.getSize());
+		}
+		FactoryBundledWithBinaryReader reader = new FactoryBundledWithBinaryReader(
+				RethrowContinuesFactory.INSTANCE, new ByteArrayProvider(blockBytes),
+				!getCurrentProgram().getLanguage().isBigEndian());
 		int ntHeaderOffset = reader.readInt(0x3C);
-		ntHeader = NTHeader.createNTHeader(reader, ntHeaderOffset, PortableExecutable.SectionLayout.FILE, false, false);
+		ntHeader = NTHeader.createNTHeader(reader, ntHeaderOffset,
+		PortableExecutable.SectionLayout.FILE, false, false);
+
 		long baseEntyPoint = ntHeader.getOptionalHeader().getAddressOfEntryPoint();
 		return getCurrentProgram().getImageBase().add(baseEntyPoint);
 	}
