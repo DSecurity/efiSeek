@@ -44,12 +44,12 @@ configurations {
 
 dependencies {
     toCopy 'org.json:json:20200518'      
-    implementation configurations.toCopy    
 }
 
 task copyToLib(type: Copy) {
-    from configurations.toCopy 
-    into 'lib'
+    copy {
+         from configurations.toCopy into 'lib'
+     }
 }
 
-processResources.dependsOn copyToLib
+buildExtension.dependsOn "copyToLib"
