@@ -19,7 +19,6 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
-import ghidra.program.model.symbol.SourceType;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
 import ghidra.program.model.listing.Variable;
@@ -31,6 +30,7 @@ import java.util.HashMap;
 public class VarnodeConverter {
 	private Address addr = null;
 	private Variable finalVar = null;
+	@SuppressWarnings("unused")
 	private Long constVar = null;
 	private ArrayList<Long> offset = new ArrayList<Long>();
 	private Boolean deref = false;
