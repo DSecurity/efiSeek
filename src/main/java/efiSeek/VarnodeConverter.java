@@ -30,6 +30,7 @@ import java.util.HashMap;
 public class VarnodeConverter {
 	private Address addr = null;
 	private Variable finalVar = null;
+	@SuppressWarnings("unused")
 	private Long constVar = null;
 	private ArrayList<Long> offset = new ArrayList<Long>();
 	private Boolean deref = false;
