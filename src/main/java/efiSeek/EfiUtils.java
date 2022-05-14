@@ -21,6 +21,7 @@ import ghidra.app.util.bin.ByteArrayProvider;
 import ghidra.app.util.bin.BinaryReader;
 import ghidra.app.util.bin.format.pe.NTHeader;
 import ghidra.app.util.bin.format.pe.PortableExecutable;
+import ghidra.app.util.bin.format.FactoryBundledWithBinaryReader;
 import ghidra.program.flatapi.FlatProgramAPI;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
@@ -112,7 +113,7 @@ public abstract class EfiUtils extends FlatProgramAPI {
 				new ByteArrayProvider(blockBytes),
 				!getCurrentProgram().getLanguage().isBigEndian());
 		int ntHeaderOffset = reader.readInt(0x3C);
-		ntHeader = new NTHeader(reader, ntHeaderOffset,
+		ntHeader = NTHeader.createNTHeader((FactoryBundledWithBinaryReader)reader, ntHeaderOffset,
 			PortableExecutable.SectionLayout.FILE, false, false);
 
 		long baseEntyPoint = ntHeader.getOptionalHeader().getAddressOfEntryPoint();

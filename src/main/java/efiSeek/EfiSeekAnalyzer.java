@@ -33,6 +33,7 @@ import ghidra.app.util.bin.BinaryReader;
 import ghidra.app.util.bin.format.pe.NTHeader;
 import ghidra.app.util.bin.format.pe.OptionalHeader;
 import ghidra.app.util.bin.format.pe.PortableExecutable;
+import ghidra.app.util.bin.format.FactoryBundledWithBinaryReader;
 import ghidra.util.Msg;
 import ghidra.util.exception.CancelledException;
 import ghidra.util.task.TaskMonitor;
@@ -73,7 +74,7 @@ public class EfiSeekAnalyzer extends AbstractAnalyzer {
 				new ByteArrayProvider(blockBytes),
 				!program.getLanguage().isBigEndian());
 			int ntHeaderOffset = reader.readInt(0x3C);
-			ntHeader = new NTHeader(reader, ntHeaderOffset,
+			ntHeader = NTHeader.createNTHeader((FactoryBundledWithBinaryReader)reader, ntHeaderOffset,
 							PortableExecutable.SectionLayout.FILE, false, false);
 		} catch (Exception e) {
 			return false;
