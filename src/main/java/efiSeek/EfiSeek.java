@@ -23,6 +23,8 @@ import java.util.*;
 
 import ghidra.program.model.data.*;
 import ghidra.util.exception.CancelledException;
+
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import ghidra.framework.Application;
@@ -62,6 +64,7 @@ public class EfiSeek extends EfiUtils {
 
 	private JSONObject meta = new JSONObject();
 	private JSONObject locateProtocol = new JSONObject();
+	private JSONObject openProtocol = new JSONObject();
 	private JSONObject installProtocol = new JSONObject();
 	private JSONObject interrupts = new JSONObject();
 	private JSONObject childSmi = new JSONObject();
@@ -71,7 +74,8 @@ public class EfiSeek extends EfiUtils {
 	private HashMap<Function, DecompileResults> decompileFunction = new HashMap<>();
 
 	private String[] uefiFuncList = new String[] { "EFI_LOCATE_PROTOCOL", "EFI_SMM_GET_SMST_LOCATION2",
-			"EFI_LOCATE_PROTOCOL", "EFI_SMM_REGISTER_PROTOCOL_NOTIFY", "REGISTER", "EFI_INSTALL_PROTOCOL_INTERFACE" };
+			"EFI_OPEN_PROTOCOL", "EFI_LOCATE_PROTOCOL", "EFI_SMM_REGISTER_PROTOCOL_NOTIFY", "REGISTER", 
+			"EFI_INSTALL_PROTOCOL_INTERFACE" };
 
 	public EfiSeek(Program prog, String gdtFileName) {
 		this.currentProgram = prog;
@@ -243,15 +247,33 @@ public class EfiSeek extends EfiUtils {
 		String protName = name.substring(0, name.length() - 5);
 		return protName;
 	}
-	
-	private void locateProtocol(PcodeOpAST pCode) throws Exception {
+	private void locateProtocol(PcodeOpAST pCode) throws Exception{
 		pCode = this.checkFuncParams(pCode, "EFI_LOCATE_PROTOCOL", 3);
 		if(pCode == null) {
 			return;
 		}
-		
+ 		Address pCodeAddress = pCode.getSeqnum().getTarget();
+		long pCodeOffset = pCodeAddress.subtract(this.imageBase);
+		JSONObject protocol = getProtocol(pCode, pCodeAddress, 1);
+		if(protocol != null)
+			this.locateProtocol.put(String.valueOf(pCodeOffset), protocol);
+	}
+
+	private void openProtocol(PcodeOpAST pCode) throws Exception{
+		pCode = this.checkFuncParams(pCode, "EFI_OPEN_PROTOCOL", 6);
+		if(pCode == null) {
+			return;
+		}
+		Address pCodeAddress = pCode.getSeqnum().getTarget();
+		long pCodeOffset = pCodeAddress.subtract(this.imageBase);
+		JSONObject protocol = getProtocol(pCode, pCodeAddress, 2);
+		if(protocol != null)
+			this.openProtocol.put(String.valueOf(pCodeOffset), protocol);
+	}
+
+	private JSONObject getProtocol(PcodeOpAST pCode, Address pCodeAddress, int guidArg) throws Exception {	
 		Guid guid = null;
-		guid = this.defineGuid(pCode.getInput(1));
+		guid = this.defineGuid(pCode.getInput(guidArg));
 		String interfaceName = null;
 		DataType interfaceType = null;
 
@@ -279,14 +301,13 @@ public class EfiSeek extends EfiUtils {
 			this.defineVar(varnodeConverter.getVariable(), interfaceType, interfaceName + this.nameCount);
 			this.nameCount++;
 		}
-		Address pCodeAddress = pCode.getSeqnum().getTarget();
-		long pCodeOffset = pCodeAddress.subtract(this.imageBase);
+		
 
 		JSONObject protocol = new JSONObject();
 		protocol.put("name", interfaceName);
 		protocol.put("function name", this.getFunctionBefore(pCodeAddress).getName());
 		protocol.put("guid", guid.toString());
-		this.locateProtocol.put(String.valueOf(pCodeOffset), protocol);
+		return protocol;
 	}
 
 	private void installProtocol(PcodeOpAST pCode) throws Exception {
@@ -653,6 +674,10 @@ public class EfiSeek extends EfiUtils {
 					Msg.info(this, "Locate Protocol in " + funcName);
 					this.locateProtocol(pCode);
 					break;
+                case ("EFI_OPEN_PROTOCOL"):                                             
+                    Msg.info(this, "Open Protocol in " + funcName);                 
+                    this.openProtocol(pCode);                                       
+                    break;
 				case ("EFI_SMM_GET_SMST_LOCATION2"):
 					Msg.info(this, "EFI_SMM_GET_SMST_LOCATION2 in " + funcName);
 					this.getSmstLocation2(pCode);
@@ -692,7 +717,7 @@ public class EfiSeek extends EfiUtils {
 
 	private void createMeta() {
 		 this.meta.put("locate protocol", this.locateProtocol);
-		 this.meta.put("locate protocol", this.locateProtocol);
+		 this.meta.put("open protocol", this.openProtocol);
 		 this.meta.put("install protocol", this.installProtocol);
 		 
 		 this.interrupts.put("child", this.childSmi);
@@ -716,6 +741,7 @@ public class EfiSeek extends EfiUtils {
 			String metaStr = new String(raw);
 			this.meta = new JSONObject(metaStr);
 			this.locateProtocol = meta.getJSONObject("locate protocol");
+			this.openProtocol = meta.getJSONObject("open protocol");
 			this.installProtocol = meta.getJSONObject("install protocol");
 			this.interrupts = meta.getJSONObject("interrupts");
 			this.childSmi = interrupts.getJSONObject("child");
